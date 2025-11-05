@@ -48,10 +48,22 @@ const WORDS = [
 let rooms = {};
 let roomCounter = 1;
 
-function createRoom() {
+function generateRoomCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+function createRoom(isPrivate = false) {
   const id = `room-${roomCounter++}`;
+  const roomCode = isPrivate ? generateRoomCode() : null;
   rooms[id] = {
     id,
+    roomCode,
+    isPrivate,
     players: [],
     hostId: null,
     status: "waiting", // waiting | starting | choosing-word | in-round | intermission | finished
@@ -71,10 +83,16 @@ function createRoom() {
 function getOrCreateAvailableRoom() {
   const openRoomId = Object.keys(rooms).find((id) => {
     const r = rooms[id];
-    return r.players.length < ROOM_MAX_PLAYERS && r.status === "waiting";
+    return !r.isPrivate && r.players.length < ROOM_MAX_PLAYERS && r.status === "waiting";
   });
   if (openRoomId) return rooms[openRoomId];
-  return createRoom();
+  return createRoom(false);
+}
+
+function findRoomByCode(code) {
+  if (!code) return null;
+  const roomId = Object.keys(rooms).find((id) => rooms[id].roomCode === code);
+  return roomId ? rooms[roomId] : null;
 }
 
 function listPublicPlayers(room) {
@@ -198,7 +216,7 @@ function startNextRound(room) {
   room.status = "choosing-word";
   room.startTimeMs = null;
   room.drawHistory = []; // clear history for new round
-  io.to(roomId).emit("clearCanvas");
+  io.to(room.id).emit("clearCanvas");
   room.currentWord = null;
 
   // determine drawer: rotate through players based on round number
@@ -230,6 +248,104 @@ app.get("/health", (req, res) => res.send("Running..."));
 io.on("connection", (socket) => {
   console.log("✅ Client connected:", socket.id);
 
+  socket.on("createPrivateRoom", ({ name }) => {
+    try {
+      if (!name?.trim()) {
+        socket.emit("errorMessage", { message: "Invalid name." });
+        return;
+      }
+
+      const room = createRoom(true);
+      addPlayerToRoom(room, socket.id, name);
+      socket.join(room.id);
+
+      const players = listPublicPlayers(room);
+
+      socket.emit("joinedRoom", {
+        roomId: room.id,
+        roomCode: room.roomCode,
+        isPrivate: room.isPrivate,
+        status: room.status,
+        round: room.round,
+        drawerId: room.drawerId,
+        youAreDrawer: room.drawerId === socket.id,
+        players,
+        playerCount: players.length,
+      });
+
+      io.to(room.id).emit("playerList", players);
+      io.to(room.id).emit("roomStatus", { status: room.status });
+
+      console.log(`🔒 ${name} created private room ${room.id} with code ${room.roomCode}`);
+    } catch (err) {
+      console.error("createPrivateRoom error:", err);
+    }
+  });
+
+  socket.on("joinPrivateRoom", ({ name, roomCode }) => {
+    try {
+      if (!name?.trim()) {
+        socket.emit("errorMessage", { message: "Invalid name." });
+        return;
+      }
+
+      if (!roomCode?.trim()) {
+        socket.emit("errorMessage", { message: "Invalid room code." });
+        return;
+      }
+
+      const room = findRoomByCode(roomCode.toUpperCase());
+      if (!room) {
+        socket.emit("errorMessage", { message: "Room not found." });
+        return;
+      }
+
+      if (room.players.length >= ROOM_MAX_PLAYERS) {
+        socket.emit("errorMessage", { message: "Room is full." });
+        return;
+      }
+
+      addPlayerToRoom(room, socket.id, name);
+      socket.join(room.id);
+
+      const players = listPublicPlayers(room);
+
+      socket.emit("joinedRoom", {
+        roomId: room.id,
+        roomCode: room.roomCode,
+        isPrivate: room.isPrivate,
+        status: room.status,
+        round: room.round,
+        drawerId: room.drawerId,
+        youAreDrawer: room.drawerId === socket.id,
+        players,
+        playerCount: players.length,
+      });
+
+      io.to(room.id).emit("playerList", players);
+      io.to(room.id).emit("roomStatus", { status: room.status });
+
+      console.log(`🔓 ${name} joined private room ${room.id} with code ${room.roomCode}`);
+
+      // Load existing canvas if game in progress
+      if (room.status === "in-round" && room.drawHistory?.length) {
+        socket.emit("loadCanvas", { drawHistory: room.drawHistory });
+      }
+
+      if (
+        room.status === "choosing-word" &&
+        room.drawerId === socket.id &&
+        room.wordChoices
+      ) {
+        socket.emit("chooseWord", { words: room.wordChoices });
+      }
+
+      tryStartGame(room);
+    } catch (err) {
+      console.error("joinPrivateRoom error:", err);
+    }
+  });
+
   socket.on("register", ({ name }) => {
     try {
       if (!name?.trim()) {
@@ -245,6 +361,8 @@ io.on("connection", (socket) => {
 
       socket.emit("joinedRoom", {
         roomId: room.id,
+        roomCode: room.roomCode,
+        isPrivate: room.isPrivate,
         status: room.status,
         round: room.round,
         drawerId: room.drawerId,
