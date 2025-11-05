@@ -3,7 +3,7 @@ import { useSocket } from "../context/SocketContext";
 import bgImage from "../Images/background.png";
 import { useUser } from "../context/UserContext";
 
-export default function Home() {
+export default function Home({ onNavigate }) {
   const socket = useSocket();
   const [name, setName] = useState("");
   const { setUser } = useUser();
@@ -46,8 +46,18 @@ export default function Home() {
             PLAY
           </button>
 
-          <button className="bg-white text-indigo-700 py-2 border border-indigo-600 rounded-lg font-semibold hover:bg-indigo-50">
+          <button 
+            className="bg-white text-indigo-700 py-2 border border-indigo-600 rounded-lg font-semibold hover:bg-indigo-50"
+            onClick={() => onNavigate('createPrivate')}
+          >
             Create Private Room
+          </button>
+          
+          <button 
+            className="bg-white text-indigo-700 py-2 border border-indigo-600 rounded-lg font-semibold hover:bg-indigo-50"
+            onClick={() => onNavigate('joinPrivate')}
+          >
+            Join Private Room
           </button>
         </div>
       </div>

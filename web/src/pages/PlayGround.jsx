@@ -13,9 +13,12 @@ export default function PlayGround() {
   const [isDrawer, setIsDrawer] = useState(false);
   const [roundTime, setRoundTime] = useState(0);
   const [wordDisplay, setWordDisplay] = useState("");
+  const [copied, setCopied] = useState(false);
   const socket = useSocket();
 
   const roomId = user?.roomId || null;
+  const roomCode = user?.roomCode || null;
+  const isPrivate = user?.isPrivate || false;
 
   console.log("🎮 PlayGround rendered:", { roomId, isDrawer });
 
@@ -123,6 +126,14 @@ export default function PlayGround() {
     };
   }, [socket, roomId]);
 
+  const copyRoomCode = () => {
+    if (roomCode) {
+      navigator.clipboard.writeText(roomCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div
       className="h-screen w-full flex flex-col bg-cover bg-center"
@@ -139,6 +150,21 @@ export default function PlayGround() {
           <br />
           <b>Word:</b> {wordDisplay}
         </div>
+
+        {isPrivate && roomCode && (
+          <div className="bg-indigo-100 px-4 py-2 rounded-lg shadow border-2 border-indigo-400">
+            <div className="text-sm text-indigo-600 font-semibold">Private Room</div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-indigo-800">{roomCode}</span>
+              <button
+                onClick={copyRoomCode}
+                className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700"
+              >
+                {copied ? "✓ Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Body */}
