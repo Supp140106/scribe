@@ -1,45 +1,46 @@
 import { useState, useEffect } from "react";
 import { useSocket } from "../context/SocketContext";
+import { useUser } from "../context/UserContext";
 
 export default function Chat() {
   const socket = useSocket();
+  const { user } = useUser();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
 
   useEffect(() => {
     if (!socket) return;
 
-    // When someone sends wrong guess (or normal chat)
-    socket.on("chatMessage", ({ from, text }) => {
+    // When someone makes a guess (displayed for everyone)
+    socket.on("chatGuess", ({ name, guess }) => {
       setMessages((prev) => [
         ...prev,
-        { system: false, text: `${from}: ${text}` }
+        { system: false, text: `${name}: ${guess}` }
       ]);
     });
 
-    // When player guesses correct and backend sends system info
-    socket.on("playerList", () => {
-      // NO UI message here — we handle correct guess locally on input success
+    // When player guesses correctly
+    socket.on("correctGuess", ({ playerName, fastBonus }) => {
+      const bonusText = fastBonus > 0 ? ` (+${fastBonus} fast bonus!)` : "";
+      setMessages((prev) => [
+        ...prev,
+        { system: true, text: `🎉 ${playerName} guessed correctly!${bonusText}` }
+      ]);
     });
 
     return () => {
-      socket.off("chatMessage");
-      socket.off("playerList");
+      socket.off("chatGuess");
+      socket.off("correctGuess");
     };
   }, [socket]);
 
   const sendMessage = () => {
     const cleanText = input.trim();
     if (!cleanText) return;
+    if (!user?.roomId) return;
 
     // Emit guess to server
-    socket.emit("guess", { guess: cleanText });
-
-    // Display your guess instantly
-    setMessages((prev) => [
-      ...prev,
-      { system: false, text: `You: ${cleanText}` }
-    ]);
+    socket.emit("guess", { roomId: user.roomId, guess: cleanText });
 
     setInput("");
   };

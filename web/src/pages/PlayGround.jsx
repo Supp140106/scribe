@@ -1,95 +1,33 @@
 // PlayGround.jsx
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import bgImage from "../Images/background.png";
-import { ReactSketchCanvas } from "react-sketch-canvas";
+import Canvas from "../components/Canvas";
 import Chat from "../components/Chat";
 import Players from "../components/Players";
 import Swal from "sweetalert2";
 import { useSocket } from "../context/SocketContext";
+import { useUser } from "../context/UserContext";
 
 export default function PlayGround() {
-  const [strokeColor, setStrokeColor] = useState("#000000");
-  const [isErasing, setIsErasing] = useState(false);
+  const { user } = useUser();
   const [isDrawer, setIsDrawer] = useState(false);
   const [roundTime, setRoundTime] = useState(0);
   const [wordDisplay, setWordDisplay] = useState("");
-  const [roomId, setRoomId] = useState(null);
-  const [drawHistory, setDrawHistory] = useState([]); // local mirror of server strokes
-  const canvasRef = useRef(null);
   const socket = useSocket();
 
-  // countdown timer in ms -> display in seconds
-  useEffect(() => {
-    let timer;
-    if (roundTime > 0) {
-      timer = setInterval(() => setRoundTime((t) => Math.max(0, t - 1000)), 1000);
-    }
-    return () => clearInterval(timer);
-  }, [roundTime]);
+  const roomId = user?.roomId || null;
 
-  // socket event wiring
+  console.log("🎮 PlayGround rendered:", { roomId, isDrawer });
+
+  // ✅ Socket events
   useEffect(() => {
     if (!socket) return;
 
-    // When server confirms a successful join it emits joinedRoom
-    socket.on("joinedRoom", (payload) => {
-      setRoomId(payload.roomId);
-      setIsDrawer(payload.youAreDrawer);
-      // if server sent a drawHistory as part of joinedRoom you can load it here too (server currently sends loadCanvas separately)
+    socket.on("joinedRoom", ({ youAreDrawer }) => {
+      console.log("🎮 joinedRoom event");
+      setIsDrawer(!!youAreDrawer);
     });
 
-    // load full history when joining in-progress round
-    socket.on("loadCanvas", ({ drawHistory: serverHistory }) => {
-      if (!canvasRef.current) return;
-      const paths = Array.isArray(serverHistory) ? serverHistory : [];
-      setDrawHistory(paths);
-      // loadPaths replaces entire canvas content
-      canvasRef.current.loadPaths(paths);
-    });
-
-    // when any client completes a stroke, server relays 'endStroke'
-    socket.on("endStroke", ({ stroke }) => {
-      // only apply strokes for non-drawer clients (drawer already has it locally),
-      // but applying it anyway keeps everyone consistent
-      if (!canvasRef.current || !stroke) return;
-      setDrawHistory((prev) => {
-        const next = [...prev, stroke];
-        // loadPaths overwrites paths so provide full array
-        try {
-          canvasRef.current.loadPaths(next);
-        } catch (err) {
-          console.warn("Failed to loadPaths on endStroke:", err);
-        }
-        return next;
-      });
-    });
-
-    // server tells clients to clear canvas
-    socket.on("clearCanvas", () => {
-      if (!canvasRef.current) return;
-      try {
-        canvasRef.current.clearCanvas();
-      } catch (err) {}
-      setDrawHistory([]);
-    });
-
-    // server tells clients to undo (it already removed last stroke on server)
-    socket.on("undoCanvas", () => {
-      if (!canvasRef.current) return;
-      try {
-        canvasRef.current.undo();
-      } catch (err) {}
-      setDrawHistory((prev) => {
-        const next = prev.slice(0, -1);
-        // ensure canvas matches
-        try {
-          canvasRef.current.loadPaths(next);
-        } catch (err) {}
-        return next;
-      });
-    });
-
-    // existing round / word logic (matches your server events)
     socket.on("chooseWord", ({ words }) => {
       setIsDrawer(true);
       Swal.fire({
@@ -113,7 +51,7 @@ export default function PlayGround() {
           buttons.forEach((btn) => {
             btn.addEventListener("click", () => {
               const chosen = btn.getAttribute("data-word");
-              socket.emit("selectWord", { word: chosen });
+              socket.emit("chooseWord", { roomId, word: chosen });
               Swal.close();
             });
           });
@@ -121,27 +59,33 @@ export default function PlayGround() {
       });
     });
 
-    socket.on("roundStartConfirmed", ({ drawerId, timeMs }) => {
-      const me = socket.id;
-      const amDrawer = me === drawerId;
+    // ✅ Timer synced with server (authoritative clock)
+    socket.on("roundInProgress", ({ drawerId, roundTimeMs, startTimeMs }) => {
+      const amDrawer = socket.id === drawerId;
       setIsDrawer(amDrawer);
-      setRoundTime(timeMs);
 
-      if (amDrawer) {
-        Swal.fire({
-          icon: "success",
-          title: "Your word has been chosen!",
-          timer: 1200,
-          showConfirmButton: false,
-        });
-      } else {
+      // Sync timer
+      const tick = () => {
+        const elapsed = Date.now() - startTimeMs;
+        const remaining = Math.max(
+          0,
+          Math.floor((roundTimeMs - elapsed) / 1000)
+        );
+        setRoundTime(remaining);
+      };
+
+      tick();
+      if (window.roundInterval) clearInterval(window.roundInterval);
+      window.roundInterval = setInterval(tick, 1000);
+
+      if (!amDrawer) {
         Swal.fire({
           icon: "info",
-          title: "Drawer has chosen a word!",
-          timer: 1200,
+          title: "Round started! Start guessing!",
+          timer: 1500,
           showConfirmButton: false,
         });
-        setWordDisplay("_____");
+        setWordDisplay("?????");
       }
     });
 
@@ -157,95 +101,27 @@ export default function PlayGround() {
       }
     });
 
-    socket.on("drawerWord", ({ word }) => {
+    socket.on("yourWord", ({ word }) => {
+      setIsDrawer(true);
       setWordDisplay(word);
+      Swal.fire({
+        icon: "success",
+        title: `Your word: ${word}`,
+        text: "Start drawing!",
+        timer: 2000,
+        showConfirmButton: false,
+      });
     });
 
-    // housekeeping: remove listeners on unmount / socket change
     return () => {
       socket.off("joinedRoom");
-      socket.off("loadCanvas");
-      socket.off("endStroke");
-      socket.off("clearCanvas");
-      socket.off("undoCanvas");
       socket.off("chooseWord");
-      socket.off("roundStartConfirmed");
+      socket.off("roundInProgress");
       socket.off("roundStart");
-      socket.off("drawerWord");
+      socket.off("yourWord");
+      if (window.roundInterval) clearInterval(window.roundInterval);
     };
-  }, [socket]);
-
-  // color change
-  const handleStrokeColorChange = (event) => {
-    setStrokeColor(event.target.value);
-    setIsErasing(false);
-    try {
-      canvasRef.current.eraseMode(false);
-    } catch (err) {}
-  };
-
-  // onStroke provided by ReactSketchCanvas fires when a stroke finishes.
-  // We export paths and send only the last stroke to the server as endStroke.
-  const handleStroke = async () => {
-    if (!isDrawer) return;
-    if (!canvasRef.current) return;
-
-    try {
-      const paths = await canvasRef.current.exportPaths(); // array of strokes
-      if (!Array.isArray(paths) || paths.length === 0) return;
-
-      // pick the most recent stroke (last element)
-      const lastStroke = paths[paths.length - 1];
-
-      // update local drawHistory immediately (optimistic)
-      setDrawHistory((prev) => {
-        const next = [...prev, lastStroke];
-        return next;
-      });
-
-      // emit stroke to server for persistence + broadcast
-      if (roomId) {
-        socket.emit("endStroke", { roomId, stroke: lastStroke });
-      }
-    } catch (err) {
-      console.error("handleStroke error:", err);
-    }
-  };
-
-  const toggleEraser = () => {
-    const newVal = !isErasing;
-    setIsErasing(newVal);
-    try {
-      canvasRef.current.eraseMode(newVal);
-    } catch (err) {}
-  };
-
-  const clearCanvas = () => {
-    try {
-      canvasRef.current.clearCanvas();
-    } catch (err) {}
-    setDrawHistory([]);
-    if (roomId) socket.emit("clearCanvas", { roomId });
-  };
-
-  const undoCanvas = () => {
-    try {
-      canvasRef.current.undo();
-    } catch (err) {}
-    // update local mirror
-    setDrawHistory((prev) => {
-      const next = prev.slice(0, -1);
-      return next;
-    });
-    if (roomId) socket.emit("undoCanvas", { roomId });
-  };
-
-  const redoCanvas = () => {
-    try {
-      canvasRef.current.redo();
-    } catch (err) {}
-    // NOTE: server doesn't handle redo; redo is local only
-  };
+  }, [socket, roomId]);
 
   return (
     <div
@@ -259,59 +135,18 @@ export default function PlayGround() {
         </h1>
 
         <div className="bg-white/70 px-4 py-2 rounded-lg shadow">
-          ⏳ {Math.ceil(roundTime / 1000)}s | ✍️ {isDrawer ? "You are drawing" : "Guess the word"}
+          ⏳ {roundTime}s | ✍️ {isDrawer ? "You are drawing" : "Guess the word"}
           <br />
           <b>Word:</b> {wordDisplay}
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Body */}
       <div className="flex flex-row items-start justify-center grow gap-4 pb-3 px-4">
         <Players />
 
-        {/* Canvas */}
         <div className="flex flex-col items-center justify-center grow gap-4 pb-3">
-          <div className="bg-white/60 backdrop-blur-md p-3 rounded-xl shadow-lg border border-white/50">
-            <ReactSketchCanvas
-              ref={canvasRef}
-              style={{ borderRadius: "20px", border: "2px solid #ddd" }}
-              width="700px"
-              height="450px"
-              canvasColor="#ffffff"
-              onStroke={handleStroke} // fires when a stroke is completed
-              strokeWidth={4}
-              strokeColor={isErasing ? "#ffffff" : strokeColor}
-              readOnly={!isDrawer}
-            />
-          </div>
-
-          {/* Toolbar */}
-          {isDrawer && (
-            <div className="flex flex-wrap items-center justify-center gap-3 bg-white/60 backdrop-blur-md px-6 py-2 rounded-xl shadow-md border border-white/40">
-              <label className="flex items-center gap-2 text-sm font-semibold">
-                🎨
-                <input
-                  type="color"
-                  value={strokeColor}
-                  onChange={handleStrokeColorChange}
-                  className="w-8 h-8 rounded cursor-pointer"
-                />
-              </label>
-
-              <button onClick={undoCanvas} className="btn">
-                Undo
-              </button>
-              <button onClick={redoCanvas} className="btn">
-                Redo
-              </button>
-              <button onClick={toggleEraser} className={`btn ${isErasing ? "bg-red-500" : ""}`}>
-                {isErasing ? "Eraser On" : "Use Eraser"}
-              </button>
-              <button onClick={clearCanvas} className="btn bg-black text-white">
-                Clear All
-              </button>
-            </div>
-          )}
+          <Canvas socket={socket} isDrawing={isDrawer} roomId={roomId} />
         </div>
 
         <Chat />

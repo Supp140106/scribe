@@ -102,7 +102,7 @@ function addPlayerToRoom(room, socketId, username) {
 
 function findRoomBySocketId(socketId) {
   const roomId = Object.keys(rooms).find((rid) =>
-    rooms[rid].players.some((p) => p.id === socketId),
+    rooms[rid].players.some((p) => p.id === socketId)
   );
   if (!roomId) return undefined;
   return rooms[roomId];
@@ -171,7 +171,7 @@ function endRound(room, { revealWord = false } = {}) {
   // schedule next round or finish
   room.intermissionTimer = setTimeout(
     () => startNextRound(room),
-    INTERMISSION_MS,
+    INTERMISSION_MS
   );
 }
 
@@ -198,6 +198,7 @@ function startNextRound(room) {
   room.status = "choosing-word";
   room.startTimeMs = null;
   room.drawHistory = []; // clear history for new round
+  io.to(roomId).emit("clearCanvas");
   room.currentWord = null;
 
   // determine drawer: rotate through players based on round number
@@ -279,16 +280,45 @@ io.on("connection", (socket) => {
 
   /** 🖌️ DRAWING EVENTS */
 
+  // Real-time segment drawing for live preview
+  socket.on("draw", ({ roomId, x0, y0, x1, y1, color, size }) => {
+    if (!roomId) return;
+    if ([x0, y0, x1, y1].some((v) => typeof v !== "number")) return;
+    socket.to(roomId).emit("draw", { x0, y0, x1, y1, color, size });
+  });
+
   // Client finished a stroke (blob of path)
   socket.on("endStroke", ({ roomId, stroke }) => {
-    if (!roomId || !stroke) return;
+    console.log(`📥 Received endStroke from ${socket.id}:`, {
+      roomId,
+      pointCount: stroke?.points?.length,
+    });
+
+    if (!roomId || !stroke) {
+      console.log("❌ Missing roomId or stroke data");
+      return;
+    }
+
     const room = rooms[roomId];
-    if (!room) return;
+    if (!room) {
+      console.log(`❌ Room ${roomId} not found`);
+      return;
+    }
+
+    console.log(
+      `🖌️ Broadcasting stroke to room ${roomId}: ${
+        stroke.points?.length || 0
+      } points`
+    );
+    console.log(
+      `   Players in room: ${room.players.map((p) => p.name).join(", ")}`
+    );
 
     room.drawHistory.push(stroke);
 
     // send stroke to everyone else in the room
     socket.to(roomId).emit("endStroke", { stroke });
+    console.log(`✅ Stroke broadcasted to other players in ${roomId}`);
   });
 
   // Clear canvas for room
@@ -307,7 +337,9 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    room.drawHistory.pop(); // remove last stroke
+    if (room.drawHistory.length > 0) {
+      room.drawHistory.pop(); // remove last stroke
+    }
     io.to(roomId).emit("undoCanvas", { drawHistory: room.drawHistory });
   });
 
@@ -335,7 +367,7 @@ io.on("connection", (socket) => {
       room.startTimeMs = Date.now();
       // reset player guesses
       room.players.forEach(
-        (p) => (p.guessed = p.id === room.drawerId ? true : false),
+        (p) => (p.guessed = p.id === room.drawerId ? true : false)
       );
 
       // notify room that round is now in progress (do NOT reveal the word except to drawer)
@@ -343,6 +375,7 @@ io.on("connection", (socket) => {
         round: room.round,
         drawerId: room.drawerId,
         roundTimeMs: ROUND_TIME_MS,
+        startTimeMs: room.startTimeMs,
       });
 
       // tell the drawer the secret word (so front-end can show it)
@@ -379,11 +412,11 @@ io.on("connection", (socket) => {
         .toLowerCase();
 
       // broadcast chat/guess to room (so everyone sees guesses)
-      io.to(room.id).emit("chatGuess", {
-        id: socket.id,
-        name: player.name,
-        guess,
-      });
+      // io.to(room.id).emit("chatGuess", {
+      //   id: socket.id,
+      //   name: player.name,
+      //   guess,
+      // });
 
       if (
         normalizedGuess &&
@@ -425,8 +458,13 @@ io.on("connection", (socket) => {
 
         // if all non-drawer players have guessed, end the round early (reveal word)
         const nonDrawerPlayers = room.players.filter(
-          (p) => p.id !== room.drawerId,
+          (p) => p.id !== room.drawerId
         );
+        console.log(
+          "DEBUG — guessed state:",
+          room.players.map((p) => ({ name: p.name, guessed: p.guessed }))
+        );
+
         const allGuessed = nonDrawerPlayers.every((p) => p.guessed === true);
         if (allGuessed) {
           endRound(room, { revealWord: true });

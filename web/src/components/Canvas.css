@@ -1,97 +1,89 @@
 .canvas-container {
-  width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 500px;
+  align-items: center;
+  gap: 1rem;
 }
 
 .toolbar {
   display: flex;
-  gap: 20px;
-  padding: 15px;
-  background: #f8f9fa;
-  border-bottom: 2px solid #e0e0e0;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
-.tool-section {
-  display: flex;
-  gap: 10px;
-}
-
-.tool-section button {
-  padding: 10px 15px;
+.toolbar button {
+  padding: 0.5rem 1rem;
   background: white;
   border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 20px;
+  border-radius: 0.5rem;
+  font-size: 1.25rem;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
 }
 
-.tool-section button:hover {
+.toolbar button:hover {
   background: #667eea;
+  color: white;
   border-color: #667eea;
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
-.tool-section button.active {
+.toolbar button.active {
   background: #667eea;
+  color: white;
   border-color: #667eea;
-}
-
-.color-picker {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .color-btn {
-  width: 35px;
-  height: 35px;
+  width: 2rem;
+  height: 2rem;
   border: 3px solid transparent;
   border-radius: 50%;
   cursor: pointer;
   transition: transform 0.2s;
+  padding: 0;
 }
 
 .color-btn:hover {
-  transform: scale(1.2);
+  transform: scale(1.15);
 }
 
 .color-btn.active {
   border-color: #333;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-}
-
-.size-picker {
-  display: flex;
-  gap: 10px;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
+  transform: scale(1.2);
 }
 
 .size-btn {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   background: white;
   border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   cursor: pointer;
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: all 0.3s;
+  transition: all 0.2s;
+  padding: 0;
 }
 
 .size-btn:hover {
   background: #f0f0f0;
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
 .size-btn.active {
   border-color: #667eea;
-  background: #f0f0ff;
+  background: rgba(102, 126, 234, 0.1);
 }
 
 .size-preview {
@@ -99,9 +91,19 @@
   border-radius: 50%;
 }
 
+.canvas-wrapper {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
 .drawing-canvas {
-  flex: 1;
-  width: 100%;
+  border-radius: 1.25rem;
+  border: 2px solid #ddd;
   background: white;
   touch-action: none;
+  display: block;
 }
