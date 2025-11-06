@@ -6,7 +6,10 @@ const cors = require("cors")
 const http = require("http"); 
 const passport = require("passport");
 const authRoute = require("./routes/auth");
+const user = require("./routes/User")
 const { Server } = require("socket.io");
+const jwt = require("jsonwebtoken");
+const User = require("./models/User");
 
 const app = express();
 app.use(
@@ -21,9 +24,10 @@ app.use(passport.session());
 
 app.use(
   cors({
-    origin:"*",
-    methods:"*",
-    credentials:true
+    origin: (origin, cb) => cb(null, true),
+    methods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false,
   })
 )
 
@@ -32,6 +36,7 @@ const io = new Server(server, {
   cors: { origin: "*" },
 });
 app.use("/auth", authRoute);
+app.use("/user",user);
 
 const PORT = process.env.PORT || 3001;
 
@@ -133,13 +138,15 @@ function listPublicPlayers(room) {
   }));
 }
 
-function addPlayerToRoom(room, socketId, username) {
+function addPlayerToRoom(room, socketId, username, opts = {}) {
   const player = {
     id: socketId,
     name: username,
     score: 0,
     connected: true,
     guessed: false,
+    userId: opts.userId || null,
+    avatar: opts.avatar || null,
   };
   room.players.push(player);
   if (!room.hostId) room.hostId = socketId;
@@ -221,15 +228,48 @@ function endRound(room, { revealWord = false } = {}) {
   );
 }
 
-function finishGame(room) {
+const finishGame = async (room) => {
   if (!room) return;
+
   clearTimers(room);
   room.status = "finished";
-  io.to(room.id).emit("gameFinished", {
-    scores: room.players.map(({ id, name, score }) => ({ id, name, score })),
-  });
-  // after finished we could cleanup after some time — keep it for now
-}
+
+  const scores = room.players.map(({ id, name, score }) => ({ id, name, score }));
+  io.to(room.id).emit("gameFinished", { scores });
+
+  // Persist pairwise history for authenticated players
+  try {
+    const playersWithUser = room.players.filter((p) => p.userId);
+    const when = new Date();
+    for (const p of playersWithUser) {
+      const entries = [];
+      for (const q of playersWithUser) {
+        if (p.userId === q.userId) continue;
+        const myScore = p.score || 0;
+        const opponentScore = q.score || 0;
+        const result = myScore > opponentScore ? "win" : myScore < opponentScore ? "loss" : "draw";
+        entries.push({
+          opponentId: q.userId,
+          opponentName: q.name,
+          myScore,
+          opponentScore,
+          result,
+          date: when,
+          roomId: room.id,
+        });
+      }
+      if (entries.length) {
+        await User.updateOne(
+          { _id: p.userId },
+          { $push: { gameHistory: { $each: entries } } }
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Error saving game history:", err);
+  }
+};
+
 
 function startNextRound(room) {
   if (!room) return;
@@ -276,7 +316,18 @@ app.get("/health", (req, res) => res.send("Running..."));
 io.on("connection", (socket) => {
   console.log("✅ Client connected:", socket.id);
 
-  socket.on("createPrivateRoom", ({ name }) => {
+  // helper to decode JWT from client payload
+  function parseClientToken(token) {
+    try {
+      if (!token) return null;
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      return { userId: payload.id, name: payload.name, avatar: payload.picture };
+    } catch {
+      return null;
+    }
+  }
+
+  socket.on("createPrivateRoom", ({ name, token, avatar }) => {
     try {
       if (!name?.trim()) {
         socket.emit("errorMessage", { message: "Invalid name." });
@@ -284,7 +335,8 @@ io.on("connection", (socket) => {
       }
 
       const room = createRoom(true);
-      addPlayerToRoom(room, socket.id, name);
+      const auth = parseClientToken(token);
+      addPlayerToRoom(room, socket.id, name, { userId: auth?.userId || null, avatar: avatar || auth?.avatar || null });
       socket.join(room.id);
 
       const players = listPublicPlayers(room);
@@ -312,7 +364,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("joinPrivateRoom", ({ name, roomCode }) => {
+  socket.on("joinPrivateRoom", ({ name, roomCode, token, avatar }) => {
     try {
       if (!name?.trim()) {
         socket.emit("errorMessage", { message: "Invalid name." });
@@ -335,7 +387,8 @@ io.on("connection", (socket) => {
         return;
       }
 
-      addPlayerToRoom(room, socket.id, name);
+      const auth = parseClientToken(token);
+      addPlayerToRoom(room, socket.id, name, { userId: auth?.userId || null, avatar: avatar || auth?.avatar || null });
       socket.join(room.id);
 
       const players = listPublicPlayers(room);
@@ -378,7 +431,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("register", ({ name }) => {
+  socket.on("register", ({ name, token, avatar }) => {
     try {
       if (!name?.trim()) {
         socket.emit("errorMessage", { message: "Invalid name." });
@@ -386,7 +439,8 @@ io.on("connection", (socket) => {
       }
 
       const room = getOrCreateAvailableRoom();
-      addPlayerToRoom(room, socket.id, name);
+      const auth = parseClientToken(token);
+      addPlayerToRoom(room, socket.id, name, { userId: auth?.userId || null, avatar: avatar || auth?.avatar || null });
       socket.join(room.id);
 
       const players = listPublicPlayers(room);
@@ -540,6 +594,34 @@ io.on("connection", (socket) => {
       io.to(room.id).emit("playerList", listPublicPlayers(room));
     } catch (err) {
       console.error("chooseWord error:", err);
+    }
+  });
+
+  /** 💬 PRIVATE MESSAGES (DMs within same room) */
+  socket.on("privateMessage", ({ roomId, to, text }) => {
+    try {
+      if (!roomId || !to || !text) return;
+      const room = rooms[roomId];
+      if (!room) return;
+      // disallow sending DM to self
+      if (to === socket.id) return;
+      const sender = room.players.find((p) => p.id === socket.id);
+      const isRecipientInRoom = room.players.some((p) => p.id === to);
+      if (!sender || !isRecipientInRoom) return;
+
+      const payload = {
+        roomId,
+        from: socket.id,
+        fromName: sender.name,
+        text: String(text),
+        timestamp: Date.now(),
+      };
+      // deliver privately to target
+      io.to(to).emit("privateMessage", payload);
+      // ack to sender so UI can show the message immediately
+      socket.emit("privateMessageDelivered", { ...payload, to });
+    } catch (err) {
+      console.error("privateMessage error:", err);
     }
   });
 

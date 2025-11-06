@@ -44,7 +44,8 @@ export default function PrivateRoom({ mode }) {
       setError("Please enter your name");
       return;
     }
-    socket.emit("createPrivateRoom", { name, avatar });
+    const token = localStorage.getItem("token");
+    socket.emit("createPrivateRoom", { name, avatar, token });
   };
 
   const handleJoin = () => {
@@ -56,9 +57,11 @@ export default function PrivateRoom({ mode }) {
       setError("Please enter a room code");
       return;
     }
+    const token = localStorage.getItem("token");
     socket.emit("joinPrivateRoom", {
       name,
       avatar,
+      token,
       roomCode: roomCode.toUpperCase(),
     });
   };

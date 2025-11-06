@@ -8,15 +8,18 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (!socket.connected) {
       socket.connect();
-      console.log("✅ Socket connected:", socket.id);
     }
+
+    socket.on("connect", () => {
+      console.log("✅ Socket connected:", socket.id);
+    });
 
     socket.on("connect_error", (err) => {
       console.error("❌ Socket connect error:", err.message);
     });
 
-    // ❌ Don't disconnect in StrictMode (React dev double-run issue)
     return () => {
+      socket.off("connect");
       socket.disconnect();
     };
   }, []);

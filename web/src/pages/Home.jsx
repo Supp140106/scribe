@@ -37,7 +37,8 @@ export default function Home() {
 
   const handleSubmit = () => {
     if (!name.trim()) return;
-    socket.emit("register", { name });
+    const token = localStorage.getItem("token");
+    socket.emit("register", { name, token, avatar });
   };
 
   const handleLogout = async () => {

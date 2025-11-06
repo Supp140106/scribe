@@ -4,6 +4,7 @@ import bgImage from "../Images/background.png";
 import Canvas from "../components/Canvas";
 import Chat from "../components/Chat";
 import Players from "../components/Players";
+
 import Swal from "sweetalert2";
 import { useSocket } from "../context/SocketContext";
 import { useUser } from "../context/UserContext";
@@ -102,6 +103,10 @@ export default function PlayGround() {
           timer: 2000,
         });
       }
+    });
+
+socket.on("gameFinished", () => {
+      navigate("/dashboard");
     });
 
     socket.on("yourWord", ({ word }) => {

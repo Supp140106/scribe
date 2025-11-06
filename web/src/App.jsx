@@ -6,6 +6,7 @@ import Home from "./pages/Home";
 import PrivateRoom from "./pages/PrivateRoom";
 import PlayGround from "./pages/PlayGround";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 
 // 🔒 Check if user is authenticated
 const isAuthenticated = () => {
@@ -59,6 +60,15 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <PlayGround />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
                 </ProtectedRoute>
               }
             />
