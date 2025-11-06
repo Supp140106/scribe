@@ -1,13 +1,37 @@
-// server.js
+require("dotenv").config();
+const cookieSession = require("cookie-session");
 const express = require("express");
-const http = require("http");
+const mongoose = require("mongoose")
+const cors = require("cors")
+const http = require("http"); 
+const passport = require("passport");
+const authRoute = require("./routes/auth");
 const { Server } = require("socket.io");
 
 const app = express();
+app.use(
+  cookieSession({
+    name:"session",
+    keys:["Suppritdas"],
+    maxAge:24*60*60*100
+  })
+)
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.use(
+  cors({
+    origin:"*",
+    methods:"*",
+    credentials:true
+  })
+)
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*" },
 });
+app.use("/auth", authRoute);
 
 const PORT = process.env.PORT || 3001;
 
@@ -49,8 +73,8 @@ let rooms = {};
 let roomCounter = 1;
 
 function generateRoomCode() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
   for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -83,7 +107,11 @@ function createRoom(isPrivate = false) {
 function getOrCreateAvailableRoom() {
   const openRoomId = Object.keys(rooms).find((id) => {
     const r = rooms[id];
-    return !r.isPrivate && r.players.length < ROOM_MAX_PLAYERS && r.status === "waiting";
+    return (
+      !r.isPrivate &&
+      r.players.length < ROOM_MAX_PLAYERS &&
+      r.status === "waiting"
+    );
   });
   if (openRoomId) return rooms[openRoomId];
   return createRoom(false);
@@ -120,7 +148,7 @@ function addPlayerToRoom(room, socketId, username) {
 
 function findRoomBySocketId(socketId) {
   const roomId = Object.keys(rooms).find((rid) =>
-    rooms[rid].players.some((p) => p.id === socketId)
+    rooms[rid].players.some((p) => p.id === socketId),
   );
   if (!roomId) return undefined;
   return rooms[roomId];
@@ -189,7 +217,7 @@ function endRound(room, { revealWord = false } = {}) {
   // schedule next round or finish
   room.intermissionTimer = setTimeout(
     () => startNextRound(room),
-    INTERMISSION_MS
+    INTERMISSION_MS,
   );
 }
 
@@ -276,7 +304,9 @@ io.on("connection", (socket) => {
       io.to(room.id).emit("playerList", players);
       io.to(room.id).emit("roomStatus", { status: room.status });
 
-      console.log(`🔒 ${name} created private room ${room.id} with code ${room.roomCode}`);
+      console.log(
+        `🔒 ${name} created private room ${room.id} with code ${room.roomCode}`,
+      );
     } catch (err) {
       console.error("createPrivateRoom error:", err);
     }
@@ -325,7 +355,9 @@ io.on("connection", (socket) => {
       io.to(room.id).emit("playerList", players);
       io.to(room.id).emit("roomStatus", { status: room.status });
 
-      console.log(`🔓 ${name} joined private room ${room.id} with code ${room.roomCode}`);
+      console.log(
+        `🔓 ${name} joined private room ${room.id} with code ${room.roomCode}`,
+      );
 
       // Load existing canvas if game in progress
       if (room.status === "in-round" && room.drawHistory?.length) {
@@ -426,10 +458,10 @@ io.on("connection", (socket) => {
     console.log(
       `🖌️ Broadcasting stroke to room ${roomId}: ${
         stroke.points?.length || 0
-      } points`
+      } points`,
     );
     console.log(
-      `   Players in room: ${room.players.map((p) => p.name).join(", ")}`
+      `   Players in room: ${room.players.map((p) => p.name).join(", ")}`,
     );
 
     room.drawHistory.push(stroke);
@@ -485,7 +517,7 @@ io.on("connection", (socket) => {
       room.startTimeMs = Date.now();
       // reset player guesses
       room.players.forEach(
-        (p) => (p.guessed = p.id === room.drawerId ? true : false)
+        (p) => (p.guessed = p.id === room.drawerId ? true : false),
       );
 
       // notify room that round is now in progress (do NOT reveal the word except to drawer)
@@ -576,11 +608,11 @@ io.on("connection", (socket) => {
 
         // if all non-drawer players have guessed, end the round early (reveal word)
         const nonDrawerPlayers = room.players.filter(
-          (p) => p.id !== room.drawerId
+          (p) => p.id !== room.drawerId,
         );
         console.log(
           "DEBUG — guessed state:",
-          room.players.map((p) => ({ name: p.name, guessed: p.guessed }))
+          room.players.map((p) => ({ name: p.name, guessed: p.guessed })),
         );
 
         const allGuessed = nonDrawerPlayers.every((p) => p.guessed === true);
@@ -639,4 +671,32 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => console.log("Server running on port", PORT));
+async function start() {
+  try {
+    if (!process.env.MONGODB_URI) {
+      console.error("❌ MONGODB_URI is not set. Configure it in your environment or server/.env");
+      process.exit(1);
+    }
+
+    // Connect first, then register passport strategies and start server
+    await mongoose.connect(process.env.MONGODB_URI);
+    const redacted = (() => {
+      try {
+        const url = new URL(process.env.MONGODB_URI);
+        return `${url.protocol}//${url.host}${url.pathname}`;
+      } catch {
+        return "<redacted>";
+      }
+    })();
+    console.log("✅ MongoDB connected:", redacted);
+
+    require("./passport");
+
+    server.listen(PORT, () => console.log("Server running on port", PORT));
+  } catch (err) {
+    console.error("❌ Failed to start server:", err?.message || err);
+    process.exit(1);
+  }
+}
+
+start();

@@ -1,34 +1,72 @@
-import { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { SocketProvider } from "./context/SocketContext";
+import { UserProvider } from "./context/UserContext";
+
 import Home from "./pages/Home";
 import PrivateRoom from "./pages/PrivateRoom";
 import PlayGround from "./pages/PlayGround";
-import { SocketProvider } from "./context/SocketContext";
-import { UserProvider, useUser } from "./context/UserContext";
+import Login from "./pages/Login";
 
-function AppRoutes() {
-  const { user } = useUser();
-  const [page, setPage] = useState("home");
+// 🔒 Check if user is authenticated
+const isAuthenticated = () => {
+  return !!localStorage.getItem("token");
+};
 
-  if (user) {
-    return <PlayGround />;
+// Protect all routes unless logged in
+function ProtectedRoute({ children }) {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
   }
-
-  if (page === "createPrivate") {
-    return <PrivateRoom mode="create" onBack={() => setPage("home")} />;
-  }
-
-  if (page === "joinPrivate") {
-    return <PrivateRoom mode="join" onBack={() => setPage("home")} />;
-  }
-
-  return <Home onNavigate={setPage} />;
+  return children;
 }
 
 export default function App() {
   return (
     <SocketProvider>
       <UserProvider>
-        <AppRoutes />
+        <BrowserRouter>
+          <Routes>
+            {/* Public Route */}
+            <Route path="/login" element={<Login />} />
+
+            {/* Protected Routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Home />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/private/create"
+              element={
+                <ProtectedRoute>
+                  <PrivateRoom mode="create" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/private/join"
+              element={
+                <ProtectedRoute>
+                  <PrivateRoom mode="join" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/playground"
+              element={
+                <ProtectedRoute>
+                  <PlayGround />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Redirect unknown routes */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
       </UserProvider>
     </SocketProvider>
   );

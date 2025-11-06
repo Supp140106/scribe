@@ -2,18 +2,12 @@ import { createContext, useContext, useState } from "react";
 
 const UserContext = createContext(null);
 
-
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [friends, setFriends] = useState([]);
-
-
-
+  const [players, setplayers] = useState([]);
 
   return (
-    <UserContext.Provider
-      value={{ user, setUser, friends, setFriends }}
-    >
+    <UserContext.Provider value={{ user, setUser, players, setplayers }}>
       {children}
     </UserContext.Provider>
   );
