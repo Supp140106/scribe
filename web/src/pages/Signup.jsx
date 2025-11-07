@@ -2,10 +2,9 @@ import { Link } from "react-router-dom";
 
 export default function Signup() {
   const googleAuth = () => {
-    window.open(
-      `${process.env.REACT_APP_API_URL}/auth/google/callback`,
-      "_self"
-    );
+    // Start the OAuth flow — the server will handle redirect to Google
+    // Use Vite env var like in Login.jsx
+    window.open(`${import.meta.env.VITE_API_URL}/auth/google`, "_self");
   };
 
   return (
