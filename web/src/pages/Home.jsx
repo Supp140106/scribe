@@ -88,7 +88,7 @@ export default function Home() {
         ) : null}
         <button
           onClick={handleLogout}
-          className="px-3 py-1.5 text-sm bg-white/90 hover:bg-white text-indigo-700 border border-indigo-600 rounded-lg font-semibold"
+          className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white border border-white rounded-lg font-semibold"
         >
           Logout
         </button>

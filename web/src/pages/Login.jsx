@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import bgImage from "../Images/background.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -20,13 +21,13 @@ export default function Login() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Log in</h1>
+    <div className="flex items-center justify-center min-h-screen bg-cover bg-center" style={{ backgroundImage: `url(${bgImage})` }}>
+      <div className="bg-white/90 backdrop-blur-sm p-8 rounded-md shadow-lg w-full max-w-md text-center border border-white/60">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">Welcome to Skribble</h1>
 
         <button
           onClick={googleAuth}
-          className="w-full flex items-center justify-center gap-3 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-medium transition duration-300"
+          className="w-full flex items-center justify-center gap-3 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-medium transition duration-300"
         >
           <img
             src="https://www.svgrepo.com/show/475656/google-color.svg"
@@ -36,12 +37,7 @@ export default function Login() {
           Continue with Google
         </button>
 
-        <p className="text-gray-600 text-sm mt-6">
-          Don’t have an account?{" "}
-          <Link to="/login" className="text-blue-500 hover:underline">
-            Sign up with Google
-          </Link>
-        </p>
+
       </div>
     </div>
   );

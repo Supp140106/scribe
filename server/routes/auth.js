@@ -40,15 +40,9 @@ router.get(
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-router.get("/logout", (req, res, next) => {
-  req.logout(function (err) {
-    if (err) {
-      console.error("Logout error:", err);
-      return next(err);
-    }
-    res.redirect(process.env.CLIENT_URL);
-  });
+router.get("/logout", (req, res) => {
+  // No need to call req.logout() — just tell the client to delete the token
+  res.redirect(process.env.CLIENT_URL);
 });
-
 
 module.exports = router;
