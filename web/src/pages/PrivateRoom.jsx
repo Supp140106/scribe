@@ -1,37 +1,30 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ for navigation
+import { useNavigate, Navigate } from "react-router-dom";
 import { useSocket } from "../context/SocketContext";
 import bgImage from "../Images/background.png";
 import { useUser } from "../context/UserContext";
 
-// Helper function to decode JWT manually (no external lib needed)
+// Minimal JWT decode to read name/avatar from our token
 function decodeJwt(token) {
   try {
     const base64Url = token.split(".")[1];
     const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    console.error("Invalid token:", e);
+    return JSON.parse(atob(base64));
+  } catch {
     return null;
   }
 }
 
 export default function PrivateRoom({ mode }) {
   const socket = useSocket();
-  const navigate = useNavigate(); // ✅ useNavigate hook for "Back" button
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState("");
-  const { setUser } = useUser();
+  const { user, setUser, setplayers } = useUser();
 
-  // Auto-fill user info from Google OAuth token
+  // Prefill from token (like Home.jsx)
   useEffect(() => {
     const token = localStorage.getItem("token");
     const payload = token ? decodeJwt(token) : null;
@@ -45,7 +38,7 @@ export default function PrivateRoom({ mode }) {
       return;
     }
     const token = localStorage.getItem("token");
-    socket.emit("createPrivateRoom", { name, avatar, token });
+    socket.emit("createPrivateRoom", { name, token, avatar });
   };
 
   const handleJoin = () => {
@@ -58,12 +51,7 @@ export default function PrivateRoom({ mode }) {
       return;
     }
     const token = localStorage.getItem("token");
-    socket.emit("joinPrivateRoom", {
-      name,
-      avatar,
-      token,
-      roomCode: roomCode.toUpperCase(),
-    });
+    socket.emit("joinPrivateRoom", { name, avatar, token, roomCode: roomCode.toUpperCase() });
   };
 
   useEffect(() => {
@@ -72,6 +60,9 @@ export default function PrivateRoom({ mode }) {
     socket.on("joinedRoom", (data) => {
       console.log("Joined private room:", data);
       setUser(data);
+      try { if (data?.players) setplayers(data.players); } catch {}
+      try { localStorage.setItem("roomInfo", JSON.stringify(data)); } catch {}
+      navigate("/playground", { replace: true });
     });
 
     socket.on("errorMessage", ({ message }) => {
@@ -82,13 +73,18 @@ export default function PrivateRoom({ mode }) {
       socket.off("joinedRoom");
       socket.off("errorMessage");
     };
-  }, [socket, setUser]);
+  }, [socket, setUser, navigate]);
+
+  // Only redirect if we still have a persisted room (meaning we didn't leave)
+  try {
+    const persisted = localStorage.getItem("roomInfo");
+    if (user?.roomId && persisted) {
+      return <Navigate to="/playground" replace />;
+    }
+  } catch {}
 
   return (
-    <div
-      className="h-screen w-full bg-cover bg-center"
-      style={{ backgroundImage: `url(${bgImage})` }}
-    >
+    <div className="h-screen w-full bg-cover bg-center" style={{ backgroundImage: `url(${bgImage})` }}>
       <h1 className="text-7xl text-indigo-50 text-center pt-7">Skribbl.io</h1>
 
       <div className="bg-indigo-200 max-w-xl h-auto mx-auto mt-28 rounded-2xl flex flex-col items-center justify-center gap-6 p-6">
@@ -96,13 +92,15 @@ export default function PrivateRoom({ mode }) {
           {mode === "create" ? "Create Private Room" : "Join Private Room"}
         </h2>
 
-        {/* ✅ Name is now read-only */}
         <input
           type="text"
           placeholder="Your Name"
           value={name}
-          readOnly
-          className="w-64 p-3 rounded-lg border border-gray-300 text-center text-indigo-600 bg-indigo-50 cursor-not-allowed"
+          onChange={(e) => {
+            setName(e.target.value);
+            setError("");
+          }}
+          className="w-64 p-3 rounded-lg border outline-indigo-600 outline-2 border-gray-300 focus:outline-none text-center text-indigo-600 focus:bg-indigo-50"
         />
 
         {mode === "join" && (
@@ -119,7 +117,9 @@ export default function PrivateRoom({ mode }) {
           />
         )}
 
-        {error && <p className="text-red-600 font-semibold text-sm">{error}</p>}
+        {error && (
+          <p className="text-red-600 font-semibold text-sm">{error}</p>
+        )}
 
         <div className="flex flex-col gap-3 w-64">
           <button
@@ -129,10 +129,9 @@ export default function PrivateRoom({ mode }) {
             {mode === "create" ? "CREATE ROOM" : "JOIN ROOM"}
           </button>
 
-          {/* ✅ Back button now goes to "/" */}
           <button
             className="bg-white text-indigo-700 py-2 border border-indigo-600 rounded-lg font-semibold hover:bg-indigo-50"
-            onClick={() => navigate("/")}
+            onClick={() => window.history.back()}
           >
             Back
           </button>

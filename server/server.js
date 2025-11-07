@@ -707,6 +707,43 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Graceful leave without closing the socket
+  socket.on("leaveRoom", (payload = {}, ack) => {
+    try {
+      const roomId = payload.roomId || (findRoomBySocketId(socket.id)?.id);
+      const room = roomId ? rooms[roomId] : null;
+      if (!room) { if (ack) ack(false); return; }
+
+      room.players = room.players.filter((p) => p.id !== socket.id);
+
+      if (room.players.length === 0) {
+        cleanupRoom(room.id);
+      } else {
+        if (room.drawerId === socket.id && room.status === "in-round") {
+          io.to(room.id).emit("system", { type: "drawerLeft" });
+          endRound(room, { revealWord: true });
+        }
+        if (room.drawerId === socket.id && room.status === "choosing-word") {
+          io.to(room.id).emit("system", { type: "drawerLeftDuringChoose" });
+          room.wordChoices = null;
+          clearTimers(room);
+          room.intermissionTimer = setTimeout(() => startNextRound(room), 1000);
+        }
+        if (!room.players.some((p) => p.id === room.drawerId)) {
+          room.drawerId = room.players.length ? room.players[0].id : null;
+        }
+        if (!room.hostId || !room.players.some((p) => p.id === room.hostId)) {
+          room.hostId = room.players.length ? room.players[0].id : null;
+        }
+        io.to(room.id).emit("playerList", listPublicPlayers(room));
+      }
+      if (ack) ack(true);
+    } catch (err) {
+      console.error("leaveRoom error:", err);
+      if (ack) ack(false);
+    }
+  });
+
   socket.on("disconnecting", () => {
     try {
       const room = findRoomBySocketId(socket.id);

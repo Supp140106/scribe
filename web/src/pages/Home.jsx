@@ -3,6 +3,7 @@ import { useSocket } from "../context/SocketContext";
 import bgImage from "../Images/background.png";
 import { useUser } from "../context/UserContext";
 import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 
 function decodeJwt(token) {
   try {
@@ -42,14 +43,21 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    const res = await Swal.fire({
+      title: "Log out?",
+      text: "You will be signed out of Scribble.io",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, log out",
+      cancelButtonText: "Cancel",
+    });
+    if (!res.isConfirmed) return;
     try {
-      // Attempt to clear any server-side session (safe even if unused)
       const api = import.meta.env.VITE_API_URL;
       if (api) {
         await fetch(`${api}/auth/logout`, { credentials: "include" }).catch(() => {});
       }
     } catch {}
-    // Always clear client token and redirect to login
     try { localStorage.removeItem("token"); } catch {}
     navigate("/login", { replace: true });
   };
@@ -86,6 +94,12 @@ export default function Home() {
             className="w-10 h-10 rounded-full border-2 border-indigo-500 shadow"
           />
         ) : null}
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="px-3 py-1.5 text-sm bg-white/80 hover:bg-white text-indigo-700 border border-indigo-600 rounded-lg font-semibold"
+        >
+          Dashboard
+        </button>
         <button
           onClick={handleLogout}
           className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 text-white border border-white rounded-lg font-semibold"

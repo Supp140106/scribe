@@ -65,24 +65,36 @@ export default function Chat() {
   const sendMessage = () => {
     const cleanText = input.trim();
     if (!cleanText) return;
-    if (!user?.roomId) return;
+
+    // Get roomId from context or fallback to persisted roomInfo
+    let roomId = user?.roomId;
+    if (!roomId) {
+      try {
+        const raw = localStorage.getItem("roomInfo");
+        if (raw) roomId = JSON.parse(raw)?.roomId || null;
+      } catch {}
+    }
+    if (!roomId) {
+      console.warn("No roomId available for chat message");
+      return;
+    }
 
     if (selectedRecipient?.id) {
       // prevent DM to self
       if (selectedRecipient.id === socket.id) {
         setSelectedRecipient(null);
-        socket.emit("guess", { roomId: user.roomId, guess: cleanText });
+        socket.emit("guess", { roomId, guess: cleanText });
       } else {
         // send DM
         socket.emit("privateMessage", {
-          roomId: user.roomId,
+          roomId,
           to: selectedRecipient.id,
           text: cleanText,
         });
       }
     } else {
       // public guess/chat
-      socket.emit("guess", { roomId: user.roomId, guess: cleanText });
+      socket.emit("guess", { roomId, guess: cleanText });
     }
 
     setInput("");

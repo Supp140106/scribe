@@ -1,5 +1,6 @@
 // PlayGround.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import bgImage from "../Images/background.png";
 import Canvas from "../components/Canvas";
 import Chat from "../components/Chat";
@@ -10,12 +11,13 @@ import { useSocket } from "../context/SocketContext";
 import { useUser } from "../context/UserContext";
 
 export default function PlayGround() {
-  const { user } = useUser();
+  const { user, setUser } = useUser();
   const [isDrawer, setIsDrawer] = useState(false);
   const [roundTime, setRoundTime] = useState(0);
   const [wordDisplay, setWordDisplay] = useState("");
   const [copied, setCopied] = useState(false);
   const socket = useSocket();
+  const navigate = useNavigate();
 
   const roomId = user?.roomId || null;
   const roomCode = user?.roomCode || null;
@@ -23,13 +25,28 @@ export default function PlayGround() {
 
   console.log("🎮 PlayGround rendered:", { roomId, isDrawer });
 
+  // If context missing (rare timing), hydrate from localStorage
+  useEffect(() => {
+    if (!user?.roomId) {
+      try {
+        const raw = localStorage.getItem("roomInfo");
+        if (raw) {
+          const info = JSON.parse(raw);
+          if (info?.roomId) setUser(info);
+        }
+      } catch {}
+    }
+  }, [user, setUser]);
+
   // ✅ Socket events
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("joinedRoom", ({ youAreDrawer }) => {
+    socket.on("joinedRoom", (hello) => {
       console.log("🎮 joinedRoom event");
-      setIsDrawer(!!youAreDrawer);
+      // Ensure user context is filled in case we navigated early from PrivateRoom
+      try { setUser(hello); } catch {}
+      setIsDrawer(!!hello?.youAreDrawer);
     });
 
     socket.on("chooseWord", ({ words }) => {
@@ -129,7 +146,7 @@ socket.on("gameFinished", () => {
       socket.off("yourWord");
       if (window.roundInterval) clearInterval(window.roundInterval);
     };
-  }, [socket, roomId]);
+  }, [socket, roomId, setUser]);
 
   const copyRoomCode = () => {
     if (roomCode) {
@@ -146,9 +163,40 @@ socket.on("gameFinished", () => {
     >
       {/* Header */}
       <div className="flex justify-between px-8 py-3 items-center">
-        <h1 className="bg-white/70 backdrop-blur-md text-3xl font-extrabold px-6 py-2 rounded-2xl shadow-lg border border-white/40">
-          Scribble.io
-        </h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              const res = await Swal.fire({
+                title: "Leave the game?",
+                text: "You will be removed from this room.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Yes, leave",
+                cancelButtonText: "Stay",
+              });
+              if (res.isConfirmed) {
+                try {
+                  if (roomId && socket) {
+                    socket.emit("leaveRoom", { roomId }, () => {});
+                  }
+                } catch {}
+                try { localStorage.removeItem("roomInfo"); } catch {}
+                try {
+                  // Clear client state so we don't auto-redirect back into old room
+                  setUser(null);
+                } catch {}
+                navigate("/", { replace: true });
+              }
+            }}
+            className="bg-white/80 hover:bg-white text-indigo-700 border border-indigo-600 px-3 py-1 rounded-lg font-semibold shadow"
+            title="Back to Home"
+          >
+            ← Back
+          </button>
+          <h1 className="bg-white/70 backdrop-blur-md text-3xl font-extrabold px-6 py-2 rounded-2xl shadow-lg border border-white/40">
+            Scribble.io
+          </h1>
+        </div>
 
         <div className="bg-white/70 px-4 py-2 rounded-lg shadow">
           ⏳ {roundTime}s | ✍️ {isDrawer ? "You are drawing" : "Guess the word"}
