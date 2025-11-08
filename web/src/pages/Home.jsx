@@ -66,7 +66,7 @@ export default function Home() {
     if (!socket) return;
 
     socket.on("joinedRoom", (hello) => {
-      console.log("Socket data:", hello);
+      // console.log("Socket data:", hello);
       setUser(hello);
       // prime the players list immediately so the new user sees everyone
       try { if (hello?.players) setplayers(hello.players); } catch {}
