@@ -63,7 +63,7 @@ export default function Dashboard() {
       >
         {/* 👇 Added the custom loader */}
         <BlinkBlur color="white" size="large" text="Skrible.io" textColor="#ffffff" />
-        <p className="text-white text-md mt-4">Loading your game history...</p>
+        
       </div>
     );
 
