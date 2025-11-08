@@ -1,23 +1,33 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SocketProvider } from "./context/SocketContext";
-import { UserProvider } from "./context/UserContext";
-
+import { UserProvider, useUser } from "./context/UserContext";
 import Home from "./pages/Home";
 import PrivateRoom from "./pages/PrivateRoom";
 import PlayGround from "./pages/PlayGround";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 
-// 🔒 Check if user is authenticated
 const isAuthenticated = () => {
   return !!localStorage.getItem("token");
 };
 
-// Protect all routes unless logged in
+
 function ProtectedRoute({ children }) {
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
+  return children;
+}
+
+
+function PlaygroundProtectedRoute({ children }) {
+  const { user } = useUser();
+
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
   return children;
 }
 
@@ -39,6 +49,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/private/create"
               element={
@@ -47,6 +58,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/private/join"
               element={
@@ -55,11 +67,15 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* ✅ Playground protected by both token and user */}
             <Route
               path="/playground"
               element={
                 <ProtectedRoute>
-                  <PlayGround />
+                  <PlaygroundProtectedRoute>
+                    <PlayGround />
+                  </PlaygroundProtectedRoute>
                 </ProtectedRoute>
               }
             />

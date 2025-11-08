@@ -62,7 +62,7 @@ export default function Players() {
               >
                 <div className="flex flex-col">
                   <span className="font-medium">{player.name}</span>
-                  <span className="text-[10px] text-gray-500">{player.id}</span>
+                  
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{player.score}</span>

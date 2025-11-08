@@ -35,13 +35,13 @@ const Canvas = ({ socket, isDrawing, roomId }) => {
       return;
     }
     
-    console.log("✅ Canvas: Setting up socket listeners", { roomId, isDrawing });
+    // console.log("✅ Canvas: Setting up socket listeners", { roomId, isDrawing });
 
     const handleEndStroke = ({ stroke }) => {
-      console.log("📥 Received stroke from server:", stroke);
+      // console.log("📥 Received stroke from server:", stroke);
       if (stroke && stroke.points) {
         drawStroke(stroke);
-        console.log("✅ Stroke drawn on canvas");
+        // console.log("✅ Stroke drawn on canvas");
       } else {
         console.log("⚠️ Invalid stroke data received");
       }

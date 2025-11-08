@@ -23,7 +23,7 @@ export default function PlayGround() {
   const roomCode = user?.roomCode || null;
   const isPrivate = user?.isPrivate || false;
 
-  console.log("🎮 PlayGround rendered:", { roomId, isDrawer });
+  // console.log("🎮 PlayGround rendered:", { roomId, isDrawer });
 
   // If context missing (rare timing), hydrate from localStorage
   useEffect(() => {
