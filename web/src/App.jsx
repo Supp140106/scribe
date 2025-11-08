@@ -23,11 +23,18 @@ function ProtectedRoute({ children }) {
 function PlaygroundProtectedRoute({ children }) {
   const { user } = useUser();
 
-
   if (!user) {
     return <Navigate to="/" replace />;
   }
 
+  return children;
+}
+
+
+function PublicRoute({ children }) {
+  if (isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
   return children;
 }
 
@@ -37,8 +44,15 @@ export default function App() {
       <UserProvider>
         <BrowserRouter>
           <Routes>
-            {/* Public Route */}
-            <Route path="/login" element={<Login />} />
+            {/* Public Route (redirects to / if already logged in) */}
+            <Route
+              path="/login"
+              element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              }
+            />
 
             {/* Protected Routes */}
             <Route
@@ -68,7 +82,7 @@ export default function App() {
               }
             />
 
-            {/* ✅ Playground protected by both token and user */}
+
             <Route
               path="/playground"
               element={

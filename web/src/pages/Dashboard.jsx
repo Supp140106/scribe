@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import bgImage from "../Images/background.png";
 import { useNavigate } from "react-router-dom";
+import { BlinkBlur } from "react-loading-indicators"; // ✅ Make sure this import exists
 
 export default function Dashboard() {
   const [history, setHistory] = useState([]);
@@ -53,14 +54,16 @@ export default function Dashboard() {
   if (loading)
     return (
       <div
-        className="flex justify-center items-center h-screen text-lg text-gray-100"
+        className="flex flex-col justify-center items-center h-screen text-lg text-gray-100 gap-4"
         style={{
           backgroundImage: `url(${bgImage})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
       >
-        Loading your game history...
+        {/* 👇 Added the custom loader */}
+        <BlinkBlur color="white" size="large" text="Skrible.io" textColor="#ffffff" />
+        <p className="text-white text-md mt-4">Loading your game history...</p>
       </div>
     );
 
